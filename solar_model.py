@@ -5,10 +5,11 @@ Created on Fri Nov  3 13:59:16 2017
 @author: Sam
 """
 
-#solar model, stolen from Falster and friends
+#solar model, repurposed from Falster and friends
 
-from scipy.integrate import quad
-import numpy as np
+#calculate radians from degrees
+def radians(x):
+    return(x/180 * np.pi)
 
 # Returns incoming PAR on surface normal to incoming light, for given solar
 # angle (in radians) S_atmos = radiation outside atmosphere W / m2/s tau:
@@ -40,9 +41,6 @@ def solar_angle(decimal_day_time, latitude):
 
   day = np.floor(decimal_day_time)
   time = (decimal_day_time - day) * 24
-  
-  def radians(x):
-    return(x/180 * np.pi)
     
   lat_radians = radians(latitude)
   
@@ -62,9 +60,6 @@ def solar_angle(decimal_day_time, latitude):
 
 
 
-def PAR_given_day_time(decimal_day_time):
-    return(PAR_given_solar_angle(solar_angle = solar_angle(decimal_day_time, -30)))
-
-
-
-quad(PAR_given_day_time, 0, 366)
+def PAR_given_day_time(decimal_day_time, latitude):
+    return(PAR_given_solar_angle(solar_angle = solar_angle(decimal_day_time, 
+                                                           latitude)))

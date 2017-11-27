@@ -4,11 +4,14 @@ Created on Fri Sep  8 14:40:48 2017
 
 @author: Sam Flake
 """
-
+# todo:
+# beer-lambert law function
+# calculate light at each stratum of each tree
+# research methods: how does this work for a non-spatially-explicit model?
+# integrate across leaves of each tree
 # add resprouting
 # add grass
 # add fire ~ grass
-# 
 
 ##############################################################################
 # Import packages and set parameters
@@ -16,71 +19,59 @@ Created on Fri Sep  8 14:40:48 2017
 
 import random as ran
 import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import quad
+import solar_model as sol #solar_model.py, does math for insolation
+from parameters import *  #parameters.py, contains parameters for simulation
+#exec(params)
 
-#parameters for the simuation
-yearBegin = 0
-maxYear = 100 # number of years to simulate
-nTrees = 1 # number of trees to start with
-pFire = 0.1 # probability of a fire
-pReprod = 0 # probability of reproduction
-fireSim = False
-years = range(maxYear)
-barkThreshold = 1 # survival threshold
 
-#tree traits
-diamInit = 1 # initial diameter of a new recruit
-diamIncrement = .2 # diameter increment per year
-#barkCoefa = 1.16
-#barkCoefb = 2.44
-sla = 10 #m2 per kg
-woodDens = 700 #kg per m2
-hmat = 5 #height at maturity
+def q(z, h = tree.height):
+    # PDF of leaf distribution as a function of height, crown shape
+    
+    if z<h:
+        return(2 * crownShape * (1-(z**crownShape)*(h**(-crownShape))) * \
+               (z**(crownShape - 1)) * (h**(-crownShape)))
+    else:
+        return(0)
+            
+quad(q, 0, 9, args = 10)  #PDF checks out, integral from 0 to h = 1
+ 
+def qCDF(z,h):
+    #indefinite integral is below. Matches results from q above 
+    return(h**(-2*crownShape)*(2*(h**crownShape) * (z**crownShape) - (z**(2*crownShape))))
+         
 
-#Individual allometry
-crownShape = 12 #crown shape parameter, eta
-stemVolAdjust = 1 - 1/(2 + crownShape) + 1/(1 + 2*crownShape) 
-leafToSapwood = 4669 #unitless, inverse of Huber value, theta
-alpha1 = 5.44 #m^-1, scaling of height with leaf area
-beta1 = 0.306 #unitless scaling of height with leaf area
-alpha2 = 6.67e-5 #m, scaling of heartwood vol with leaf area
-beta2 = 1.75 #unitless scaling of heartwood vol with leaf area
-alpha3 = 0.07 #kg m^-2, scaling root mass with leaf area
-relBarkThickness = 0.17
+def getLeafAreaAboveZ(z):
+    leafAreasAboveZ = []
+    
+    for tree in forest:
+        propLeafAboveZ = 1 - qCDF(z, tree.height)
+        LAaboveZ = propLeafAboveZ * tree.areaLeaves
+        leafAreasAboveZ.append(LAaboveZ)
+    
+    totalLAAboveZ = sum(leafAreasAboveZ)
+    
+    return(totalLAAboveZ)
 
-#Production
-massNitPerAreaLeaf = 1.87e-3 #kg * m^-2
-ratioAssToMassNit = 1.78e5 # mol * year^-1 * kg^-1
-APerLA = massNitPerAreaLeaf * ratioAssToMassNit
-ratioDarkRespToLeafNit = 2.1e4 #mol year-1 kg -1
-fineRootRespPerMass = 217 # mol year-1 kg-1
-sapwoodRespPerStemVol = 4012 #mol year-1 m-3
-yieldCarbon = 0.7 #dimensionless, ratio of fixed carbon per assimilated carbon
-carbonToDryMass = 2.45e-2 # kg mol-1, convert mols to kg carbon
-alpha4 = 2.86e-2 #m2 kg-1 yr-1, describes scaling of turnover rate for 
-                 #leaf with LMA
-beta4 = 1.71 #dimensionless, same desc as alpha4
-turnoverBark = .2 # year-1, proportion bark turnover
-turnoverFineRoots = 1.0 # year-1, proportion root turnover
+# canopy openness at height z given the leaf areas and     
+def E(z):
+    return(-extinct * getLeafAreaAboveZ(z))
 
-#Seed production
-costAccessory = 4 #dimensionless, scale accessory costs by seed mass
-maxAllocationReprod = 1.0 #dimensionless, maximum allocation to reprodution
-rateOfChangeAtMaturity = 50 # alters equation 16
+#leaf-specific instantaneous assimilation rate for given cP1 and cP2, 
+#see appendix S6 of Falster et al 2011
 
-#carbon assimilation constants
-#need to revise to reflect cerrado system, light-response curves for cerrado plants
-cP1 = 150.36
-cP2 = 0.19
-
-#unused empirical relationship between bark and diameter
-#def calc_bark_thickness(diam, barkCoefa, barkCoefb):
-#    #relationship parameterized from savanna field data
-#    return(barkCoefa + barkCoefb * np.log(diam))
-
+def Alf(z):
+    return(cP1 * (E(z)/(E(z) + cP2)))
+    
+#instantaneous assimilation of the leaves at height z
+def Alayer(z):
+    
+    return(Alf(z) * q(z) * tree.areaLeaves)
+        
 ######################################################################
 # Define classes
 ######################################################################
-
 
 class Tree(object) :
        
@@ -141,50 +132,59 @@ class Tree(object) :
 # Initialize some data structures
 #############################################################################
 
+
+#initialize a stand
+forest = [Tree(number = i, birthYear = yearBegin) for i in range(nTrees)]
+
+year = yearBegin
+
 # store trees in a list
 standData = {"year" : [],
              "diams" : {},
-             "ba" : {}}
+             "ba" : {},
+             "maxHeight" : {}}
+
+#initialize standData for the first year, outside of the loop
+yearData = {"biomass" : [],
+            "diams" : [],
+            "csa" : [],
+            "height" : []} #temporary data for the year
+for i in range(len(forest)) :
+    if forest[i].alive : #get all the diameters
+        yearData["biomass"].append(forest[i].massTotal)
+        yearData["diams"].append(forest[i].currentDiam),
+        yearData["csa"].append(np.pi * (forest[i].currentDiam /2) ** 2)
+        yearData["height"].append(forest[i].height)
+  
+#add stand data to global variable        
+standData["year"].append(year)
+standData["diams"].update({year : np.mean(yearData["diams"]) } )
+ba = sum(yearData["csa"][i] for i in range(0,len(yearData["csa"])))
+standData["ba"].update({year : ba})
+standData["maxHeight"].update({year : np.max(yearData["height"])})
+#print(standData["ba"])
 
 
-forest = [Tree(number = i, birthYear = yearBegin) for i in range(nTrees)]
-    
 ##############################################################################
-# Simulation body
+# Simulation main loop
 ##############################################################################
-
-   
+  tree = forest[0]
 # Simulation loop
 for year in years :  
+           
     
     #is there a fire this year?
     if fireSim:
         fire = (ran.random() < pFire)
-    
-    
-    
     
     #tree loop
     for tree in forest : 
         
         #insolation of leaves
         
+
         
-        #carbon uptake
-        canopyOpen = 1
-                
-        q = 2g(1-znh)n)zn)1h)n if z £ h, otherwise 0 
-        z = 
-        def q(h, z):
-            2 * crownShape * (1-z**crownShape)
-        LA above height z = 
-        
-        Ez = exp(-extinct * integral(0 to infinity) of 
-                 (LA above height z) * leaf area * )
-        
-        Alf = cP1 * (Ez/(Ez + cP2))
-        
-        assim = leaf area * integral(from 0 to height) of (Alf * PDF of leaves)
+        assim = tree.areaLeaves * quad(Alayer, 0, tree.height)
         
         reproduce = ran.random() < pReprod
         
@@ -201,20 +201,26 @@ for year in years :
 #                newNumber = len(forest) + 1
 #                forest.append(Tree(number = newNumber, birthYear = year))
     
-    
-    # Calculate some stand-level summaries in a local variable
-    yearData = {"biomass" : []} #temporary data for the year
-    for i in range(len(forest)) :
-        if forest[i].alive : #get all the diameters
-            yearData["biomass"].append(forest[i].massTotal)
-            yearData["csa"].append(forest[i].currentDiam ** 2)
-      
-    #add stand data to global variable        
-    standData["year"].append(year)
-    standData["diams"].update({year : np.mean(yearData["diams"]) } )
-    ba = sum(yearData["csa"][i] for i in range(0,len(yearData["csa"])))
-    standData["ba"].update({year : ba})
-    #print(standData["ba"])
+    if year > yearBegin:
+        # Calculate some stand-level summaries in a local variable
+        yearData = {"biomass" : [],
+                    "diams" : [],
+                    "csa" : [],
+                    "height" : []} #temporary data for the year
+        for i in range(len(forest)) :
+            if forest[i].alive : #get all the diameters
+                yearData["biomass"].append(forest[i].massTotal)
+                yearData["diams"].append(forest[i].currentDiam),
+                yearData["csa"].append(np.pi * (forest[i].currentDiam /2) ** 2)
+                yearData["height"].append(forest[i].height)
+          
+        #add stand data to global variable        
+        standData["year"].append(year)
+        standData["diams"].update({year : np.mean(yearData["diams"]) } )
+        ba = sum(yearData["csa"][i] for i in range(0,len(yearData["csa"])))
+        standData["ba"].update({year : ba})
+        standData["maxHeight"].update({year : np.max(yearData["height"])})
+        #print(standData["ba"])
             
             
 ##############################################################################         
@@ -230,7 +236,6 @@ for year in years :
 #print(np.mean(data["diams"])) 
 
 
-import matplotlib.pyplot as plt
 
 x = [list(standData["ba"].keys())]
 y = [list(standData["ba"].values())]
