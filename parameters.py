@@ -60,7 +60,7 @@ costAccessory = 4 #dimensionless, scale accessory costs by seed mass
 maxAllocationReprod = 1.0 #dimensionless, maximum allocation to reprodution
 rateOfChangeAtMaturity = 50 # alters equation 16
 
-#carbon assimilation constants
+#carbon assimilation constants -- appendix S6 from Falster et al 2011
 #need to revise to reflect cerrado system, light-response curves for cerrado plants
 cP1 = 150.36
 cP2 = 0.19
