@@ -1,5 +1,6 @@
 # Fire-simulation
-A model to simulate how plant traits and disturbance interact
+A model to simulate how plant traits and disturbance interact. It'll have a name
+at some point. Despite the title, it doesn't have fire in it yet. :(
 
 Created by Sam Flake, North Carolina State University
 
