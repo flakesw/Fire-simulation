@@ -21,3 +21,9 @@ Plans to extend this model include incorporating a model of the grass layer and 
 this to develop a fuels component for modeling fire. Fire will then feed back into
 the tree growth  model through tree mortality and leaf damage. This is a ways down the
 road though.
+
+The program lives in fire evol sim.py, and the parameters all live in parameters.py. 
+When it's time to tune the program, it should be possible just to edit parameters.py,
+run fire evol sim.py, and loop through different traits. Right now fire evol sim.py
+doesn't produce any output that's usable, but the goal is to wrap it in another 
+script that does the iteration over different traits, etc.
