@@ -21,9 +21,9 @@ diamInit = 1 # initial diameter of a new recruit
 diamIncrement = .2 # diameter increment per year
 #barkCoefa = 1.16
 #barkCoefb = 2.44
-sla = 10 #m2 per kg
-woodDens = 700 #kg per m2
-hmat = 5 #height at maturity
+lma = 0.11 #m2 per kg
+woodDens = 608 #kg per m2
+hmat = 12 #height at maturity
 
 #Individual allometry
 crownShape = 12 #crown shape parameter, eta

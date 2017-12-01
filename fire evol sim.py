@@ -92,6 +92,7 @@ def Alayer(z, tree, standData, year):
     return(Alf(z, tree, standData, year) * q(z, tree.height) * tree.areaLeaves)
         
 
+
 def plotTreeCanopyShape(tree):
     # draws a picture of a tree
     x = list(frange(0, tree.height, step = 0.1))
@@ -101,6 +102,26 @@ def plotTreeCanopyShape(tree):
         #y.append(tree.areaLeaves * Alayer(x[i], tree))
     plt.axis([0, max(y) + .3, 0, tree.height+1])
     plt.plot(y, x, "bo")
+    
+    
+def respire(areaLeaves, massSapwood, massBark, massFineRoots):
+    #calculates respiration as f(tree attributes), eq 13 in Falster
+        return(areaLeaves * pa.massNitPerAreaLeaf * \
+                pa. ratioDarkRespToLeafNit + \
+                ((massSapwood + 2*massBark)/pa.woodDens * \
+                pa.sapwoodRespPerStemVol) + massFineRoots * \
+                 pa.fineRootRespPerMass)
+            
+def turnover(massLeaves, massBark, massFineRoots) :
+    #calculates turnover in biomass, eq14 in Falster
+    return(massLeaves * pa.alpha4 * (pa.lma**-pa.beta4) + \
+        massBark * pa.turnoverBark + \
+        massFineRoots * pa.turnoverFineRoots)
+        
+def netProduction(photosynthate, resp, turnover) :
+    #net production of carbon, eq 15 in Falster
+    return((photosynthate - resp) * pa.carbonToDryMass * pa.yieldCarbon -\
+        turnover)   
 ######################################################################
 # Define classes
 ######################################################################
@@ -116,7 +137,7 @@ class Tree(object) :
     '''
         
     def __init__(self, number, birthYear = 0, currentAge = 0, alive = True,\
-                 diamInit = diamInit):
+                 diamInit = pa.diamInit):
         
         self.number = number
         self.currentAge = 0
@@ -127,8 +148,8 @@ class Tree(object) :
         self.aliveDict = {birthYear: alive}
         
         #tree traits
-        self.massLeaves = 0.5
-        self.areaLeaves = self.massLeaves * pa.sla #omega
+        self.massLeaves = 5
+        self.areaLeaves = self.massLeaves * pa.lma #omega
         self.height = pa.alpha1 * (self.areaLeaves**pa.beta1)
         self.massSapwood = pa.woodDens * pa.stemVolAdjust * \
             (1/pa.leafToSapwood) * self.height
@@ -140,13 +161,40 @@ class Tree(object) :
                        + self.massBark + self.massFineRoots
         self.woodVolume = (self.massSapwood + self.massHeartwood)/pa.woodDens
         self.currentDiam = np.sqrt(self.woodVolume * 3 / self.height / np.pi)
-        
+        self.netProd = 0
         
     def grow(self, photosynthate) :
         # Grow the tree by increment
-        self.massLeaves = self.massLeaves + photosynthate
         
-        self.areaLeaves = self.massLeaves * pa.sla #omega
+        #ideas to explore: how does bark turnover covary with bark density,
+        # thickness, etc.?
+        
+        #need to get a bark density separate from wood
+                
+        resp = respire(self.areaLeaves, self.massSapwood, self.massBark, 
+                    self.massFineRoots)
+        
+        turn = turnover(self.massLeaves, self.massBark, self.massFineRoots)
+        
+        self.netProd = netProduction(photosynthate, resp, turn)
+        
+        fracReprod = pa.maxAllocationReprod * \
+        (1 + np.exp(pa.rateOfChangeAtMaturity * \
+                    (1 - self.height/pa.hmat)))**(-1)
+                
+        if(self.netProd > 0) :
+            rateOfReprod = fracReprod * self.netProd / pa.costAccessory
+        else:
+            rateOfReprod = 0
+        
+        if(self.netProd >0):
+            newLeafMass =  (1 - fracReprod) * self.netReprod * self.massLeaves / self.massTotal 
+        else : 
+            newLeafMass = 0
+            
+        self.massLeaves = self.massLeaves + newLeafMass
+        
+        self.areaLeaves = self.massLeaves * pa.lma #omega
         self.height = pa.alpha1 * (self.areaLeaves**pa.beta1)
         self.massSapwood = pa.woodDens * pa.stemVolAdjust * \
             (1/pa.leafToSapwood) * self.height
@@ -168,6 +216,9 @@ class Tree(object) :
         self.diamsDict.update({ year + 1 : self.newDiam })
         
         #self.barkThickness = calc_bark_thickness(self.currentDiam, barkCoefa, barkCoefb)
+        
+    #def reproduce(self):        
+        
         
     def die(self) :
         # Simple enough
@@ -230,13 +281,15 @@ for year in pa.years :
         if tree.alive :
             # carbon assimilated by all leaf layers in the tree,
             # corresponds to equation 12 in Falster 2011           
-            assim = quad(Alayer, 0, tree.height, args = (tree, standData, year), maxp1=50, limit=300)
+            assim = quad(Alayer, 0, tree.height, 
+                         args = (tree, standData, year), maxp1=50, limit=300)
             
             #reproduce = ran.random() < pa.pReprod
             
             #print(tree.barkThickness)
             
             tree.grow(assim[0])     
+            print(assim[0])
             
             #if fire :   
               #  if (tree.barkThickness < pa.barkThreshold) : 
